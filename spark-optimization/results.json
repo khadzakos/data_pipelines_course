@@ -1,0 +1,216 @@
+{
+  "broadcast": {
+    "baseline": {
+      "time_s": 1.1644322872161865,
+      "metrics": {
+        "shuffleReadBytes": 472,
+        "shuffleWriteBytes": 472,
+        "memoryBytesSpilled": 0,
+        "diskBytesSpilled": 0,
+        "executorRunTime": 1149,
+        "inputBytes": 0,
+        "numTasks": 25
+      }
+    },
+    "broadcast": {
+      "time_s": 0.12366008758544922,
+      "metrics": {
+        "shuffleReadBytes": 944,
+        "shuffleWriteBytes": 944,
+        "memoryBytesSpilled": 0,
+        "diskBytesSpilled": 0,
+        "executorRunTime": 1204,
+        "inputBytes": 0,
+        "numTasks": 50
+      }
+    }
+  },
+  "skew": {
+    "baseline": {
+      "time_s": 0.535459041595459,
+      "metrics": {
+        "shuffleReadBytes": 158731,
+        "shuffleWriteBytes": 158731,
+        "memoryBytesSpilled": 0,
+        "diskBytesSpilled": 0,
+        "executorRunTime": 4027,
+        "inputBytes": 0,
+        "numTasks": 77
+      }
+    },
+    "salted": {
+      "time_s": 0.31598401069641113,
+      "metrics": {
+        "shuffleReadBytes": 316518,
+        "shuffleWriteBytes": 316518,
+        "memoryBytesSpilled": 0,
+        "diskBytesSpilled": 0,
+        "executorRunTime": 5452,
+        "inputBytes": 0,
+        "numTasks": 104
+      }
+    }
+  },
+  "repartition": {
+    "baseline": {
+      "time_s": 0.2183241844177246,
+      "metrics": {
+        "shuffleReadBytes": 356305,
+        "shuffleWriteBytes": 356849,
+        "memoryBytesSpilled": 0,
+        "diskBytesSpilled": 0,
+        "executorRunTime": 6485,
+        "inputBytes": 0,
+        "numTasks": 148
+      },
+      "num_partitions": 8
+    },
+    "repartition": {
+      "2": {
+        "time_s": 0.8735649585723877,
+        "metrics": {
+          "shuffleReadBytes": 492800,
+          "shuffleWriteBytes": 17864051,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 18359,
+          "inputBytes": 0,
+          "numTasks": 197
+        },
+        "num_partitions": 2
+      },
+      "4": {
+        "time_s": 0.3214089870452881,
+        "metrics": {
+          "shuffleReadBytes": 661187,
+          "shuffleWriteBytes": 35411390,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 21115,
+          "inputBytes": 0,
+          "numTasks": 252
+        },
+        "num_partitions": 4
+      },
+      "8": {
+        "time_s": 0.21976423263549805,
+        "metrics": {
+          "shuffleReadBytes": 893614,
+          "shuffleWriteBytes": 53032509,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 23057,
+          "inputBytes": 0,
+          "numTasks": 319
+        },
+        "num_partitions": 8
+      },
+      "16": {
+        "time_s": 0.28587818145751953,
+        "metrics": {
+          "shuffleReadBytes": 1243497,
+          "shuffleWriteBytes": 70780967,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 25105,
+          "inputBytes": 0,
+          "numTasks": 410
+        },
+        "num_partitions": 16
+      },
+      "50": {
+        "time_s": 0.5713479518890381,
+        "metrics": {
+          "shuffleReadBytes": 2074856,
+          "shuffleWriteBytes": 89038848,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 29882,
+          "inputBytes": 0,
+          "numTasks": 603
+        },
+        "num_partitions": 50
+      },
+      "100": {
+        "time_s": 1.0766098499298096,
+        "metrics": {
+          "shuffleReadBytes": 3621515,
+          "shuffleWriteBytes": 108179072,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 38794,
+          "inputBytes": 0,
+          "numTasks": 946
+        },
+        "num_partitions": 100
+      },
+      "200": {
+        "time_s": 1.6970560550689697,
+        "metrics": {
+          "shuffleReadBytes": 6714774,
+          "shuffleWriteBytes": 128899095,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 52215,
+          "inputBytes": 0,
+          "numTasks": 1589
+        },
+        "num_partitions": 200
+      },
+      "500": {
+        "time_s": 4.231723070144653,
+        "metrics": {
+          "shuffleReadBytes": 14437892,
+          "shuffleWriteBytes": 155141377,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 85065,
+          "inputBytes": 0,
+          "numTasks": 3134
+        },
+        "num_partitions": 500
+      },
+      "1000": {
+        "time_s": 7.8143229484558105,
+        "metrics": {
+          "shuffleReadBytes": 26826128,
+          "shuffleWriteBytes": 187009534,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 142911,
+          "inputBytes": 0,
+          "numTasks": 6183
+        },
+        "num_partitions": 1000
+      }
+    },
+    "coalesce": {
+      "2": {
+        "time_s": 0.11904692649841309,
+        "metrics": {
+          "shuffleReadBytes": 26836119,
+          "shuffleWriteBytes": 187019525,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 143065,
+          "inputBytes": 0,
+          "numTasks": 6192
+        },
+        "num_partitions": 2
+      },
+      "4": {
+        "time_s": 0.07418179512023926,
+        "metrics": {
+          "shuffleReadBytes": 26856042,
+          "shuffleWriteBytes": 187039448,
+          "memoryBytesSpilled": 0,
+          "diskBytesSpilled": 0,
+          "executorRunTime": 143200,
+          "inputBytes": 0,
+          "numTasks": 6207
+        },
+        "num_partitions": 4
+      }
+    }
+  }
+}
