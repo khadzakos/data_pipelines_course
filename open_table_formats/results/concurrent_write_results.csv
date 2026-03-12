@@ -1,0 +1,9 @@
+batch_id,format,status,error,time_sec,rows_written,retries
+4,Delta Lake,success,,0.016,10000,0
+1,Delta Lake,success,,0.075,10000,0
+3,Delta Lake,success,,0.02,10000,0
+2,Delta Lake,success,,0.02,10000,0
+1,Iceberg,success,,0.074,10000,0
+2,Iceberg,failed,"Requirement failed: branch main has changed: expected id 5293642740091457533, found 8088619576758869912",0.0,0,0
+3,Iceberg,failed,"Requirement failed: branch main has changed: expected id 5293642740091457533, found 8088619576758869912",0.0,0,0
+4,Iceberg,failed,"Requirement failed: branch main has changed: expected id 5293642740091457533, found 8088619576758869912",0.0,0,0

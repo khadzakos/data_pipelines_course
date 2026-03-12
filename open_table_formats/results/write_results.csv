@@ -1,0 +1,13 @@
+format,write_time_sec,size_mb,rows,sample_fraction
+Parquet,0.05,4.85,100000,0.1
+Delta Lake,0.125,4.85,100000,0.1
+Iceberg,0.119,3.98,100000,0.1
+Parquet,0.081,8.82,200000,0.2
+Delta Lake,0.09,8.83,200000,0.2
+Iceberg,0.119,7.62,200000,0.2
+Parquet,0.146,19.69,500000,0.5
+Delta Lake,0.193,19.72,500000,0.5
+Iceberg,0.215,16.53,500000,0.5
+Parquet,0.215,29.27,1000000,1.0
+Delta Lake,0.283,29.23,1000000,1.0
+Iceberg,0.276,20.17,1000000,1.0

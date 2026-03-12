@@ -1,0 +1,28 @@
+format,operation,read_time_sec,rows,iteration
+Parquet,full_scan,0.0283,1000000,0
+Parquet,filtered_scan,0.0305,99505,0
+Parquet,aggregation,0.0311,10,0
+Delta Lake,full_scan,0.0444,1000000,0
+Delta Lake,filtered_scan,0.0318,99505,0
+Delta Lake,aggregation,0.0774,10,0
+Iceberg,full_scan,0.0419,1000000,0
+Iceberg,filtered_scan,0.0426,99505,0
+Iceberg,aggregation,0.061,10,0
+Parquet,full_scan,0.0274,1000000,1
+Parquet,filtered_scan,0.0276,99505,1
+Parquet,aggregation,0.0213,10,1
+Delta Lake,full_scan,0.0316,1000000,1
+Delta Lake,filtered_scan,0.0597,99505,1
+Delta Lake,aggregation,0.0546,10,1
+Iceberg,full_scan,0.0357,1000000,1
+Iceberg,filtered_scan,0.0396,99505,1
+Iceberg,aggregation,0.0586,10,1
+Parquet,full_scan,0.0272,1000000,2
+Parquet,filtered_scan,0.0269,99505,2
+Parquet,aggregation,0.0213,10,2
+Delta Lake,full_scan,0.0317,1000000,2
+Delta Lake,filtered_scan,0.0324,99505,2
+Delta Lake,aggregation,0.0474,10,2
+Iceberg,full_scan,0.0351,1000000,2
+Iceberg,filtered_scan,0.0395,99505,2
+Iceberg,aggregation,0.059,10,2
