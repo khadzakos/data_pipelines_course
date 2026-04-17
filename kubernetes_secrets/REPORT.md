@@ -1,4 +1,5 @@
-# Управление секретами в Kubernetes (краткое сравнение)
+# Управление секретами в Kubernetes
+Автор: Николай Хадзакос
 
 Для работы сравниваются нативные **Secrets**, **HashiCorp Vault**, **External Secrets Operator**, плюс коротко **Sealed Secrets**.
 
