@@ -1,163 +1,87 @@
 # =============================================================================
 # WorkflowTemplate 1: Data Ingestion & Validation
 # =============================================================================
-# Назначение: Универсальный шаблон для загрузки данных из внешнего источника
-# (HTTP/S3/GCS/SFTP) с последующей базовой валидацией схемы и формата.
+# Загружает файл из HTTP/S3 и проверяет, что он не пустой.
 #
-# Входные параметры:
-#   source-type       — тип источника: http | s3 | gcs | sftp
-#   source-uri        — URI источника (URL, s3://bucket/key, gs://bucket/obj, sftp://host/path)
-#   destination-path  — путь назначения внутри пайплайна (локальный или S3-путь)
-#   file-format       — формат файла: csv | json | parquet | avro
-#   schema-json       — JSON-строка со схемой (поля и типы) для валидации
-#   delimiter         — разделитель для CSV (по умолчанию ",")
-#   max-rows-sample   — сколько строк проверять при валидации (по умолчанию 1000)
+# inputs.parameters:
+#   source-uri      — URL или s3://bucket/key
+#   destination     — локальный путь для сохранения
+#   expected-format — csv | json | parquet
 #
-# Выходные параметры:
-#   ingested-path     — итоговый путь к загруженному файлу
-#   row-count         — количество строк в файле
-#   validation-status — "passed" | "failed"
-#   validation-report — JSON-отчёт с деталями валидации
+# outputs.parameters:
+#   saved-path      — путь к сохранённому файлу
+#   row-count       — число строк (для csv/json; -1 для parquet)
+#   status          — "ok" | "empty"
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: data-ingestion-template
+  name: data-ingestion
   namespace: argo
   labels:
-    app: data-pipeline
     layer: ingestion
-  annotations:
-    description: "Universal data ingestion and schema validation template"
-    version: "1.0.0"
 spec:
-  # ── Шаблоны, доступные для вызова ──────────────────────────────────────────
   templates:
-
-    # ── Точка входа: оркестрирует шаги загрузки и валидации ─────────────────
-    - name: ingest-and-validate
+    - name: ingest
       inputs:
         parameters:
-          - name: source-type
           - name: source-uri
-          - name: destination-path
-          - name: file-format
-          - name: schema-json
-            value: "{}"          # пустая схема = валидация пропускается
-          - name: delimiter
-            value: ","
-          - name: max-rows-sample
-            value: "1000"
+          - name: destination
+            value: "/data/raw/file"
+          - name: expected-format
+            value: "csv"
       outputs:
         parameters:
-          - name: ingested-path
+          - name: saved-path
             valueFrom:
-              parameter: "{{steps.download.outputs.parameters.output-path}}"
+              path: /tmp/saved-path.txt
           - name: row-count
             valueFrom:
-              parameter: "{{steps.validate.outputs.parameters.row-count}}"
-          - name: validation-status
+              path: /tmp/row-count.txt
+          - name: status
             valueFrom:
-              parameter: "{{steps.validate.outputs.parameters.status}}"
-          - name: validation-report
-            valueFrom:
-              parameter: "{{steps.validate.outputs.parameters.report}}"
-      steps:
-        # Шаг 1: скачать / скопировать данные из источника
-        - - name: download
-            template: download-data
-            arguments:
-              parameters:
-                - name: source-type
-                  value: "{{inputs.parameters.source-type}}"
-                - name: source-uri
-                  value: "{{inputs.parameters.source-uri}}"
-                - name: destination-path
-                  value: "{{inputs.parameters.destination-path}}"
-                - name: file-format
-                  value: "{{inputs.parameters.file-format}}"
-
-        # Шаг 2: валидировать схему и формат
-        - - name: validate
-            template: validate-schema
-            arguments:
-              parameters:
-                - name: file-path
-                  value: "{{steps.download.outputs.parameters.output-path}}"
-                - name: file-format
-                  value: "{{inputs.parameters.file-format}}"
-                - name: schema-json
-                  value: "{{inputs.parameters.schema-json}}"
-                - name: delimiter
-                  value: "{{inputs.parameters.delimiter}}"
-                - name: max-rows-sample
-                  value: "{{inputs.parameters.max-rows-sample}}"
-
-    # ── Шаблон загрузки данных ───────────────────────────────────────────────
-    - name: download-data
-      inputs:
-        parameters:
-          - name: source-type
-          - name: source-uri
-          - name: destination-path
-          - name: file-format
-      outputs:
-        parameters:
-          - name: output-path
-            valueFrom:
-              path: /tmp/output-path.txt
+              path: /tmp/status.txt
       container:
         image: python:3.11-slim
         command: [python, -c]
         args:
           - |
-            import os, sys, json, subprocess, urllib.request, pathlib
+            import urllib.request, subprocess, json, pathlib, sys
 
-            source_type = "{{inputs.parameters.source-type}}"
-            source_uri  = "{{inputs.parameters.source-uri}}"
-            dest_path   = "{{inputs.parameters.destination-path}}"
-            fmt         = "{{inputs.parameters.file-format}}"
+            uri  = "{{inputs.parameters.source-uri}}"
+            dest = "{{inputs.parameters.destination}}"
+            fmt  = "{{inputs.parameters.expected-format}}"
 
-            pathlib.Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
+            pathlib.Path(dest).parent.mkdir(parents=True, exist_ok=True)
 
-            if source_type == "http":
-                print(f"[ingestion] Downloading from HTTP: {source_uri}")
-                urllib.request.urlretrieve(source_uri, dest_path)
-
-            elif source_type == "s3":
-                print(f"[ingestion] Copying from S3: {source_uri}")
-                subprocess.run(["aws", "s3", "cp", source_uri, dest_path], check=True)
-
-            elif source_type == "gcs":
-                print(f"[ingestion] Copying from GCS: {source_uri}")
-                subprocess.run(["gsutil", "cp", source_uri, dest_path], check=True)
-
-            elif source_type == "sftp":
-                # Ожидается, что SSH-ключ смонтирован через Secret
-                host, remote_path = source_uri.replace("sftp://", "").split("/", 1)
-                print(f"[ingestion] Downloading via SFTP from {host}")
-                subprocess.run(
-                    ["sftp", "-o", "StrictHostKeyChecking=no",
-                     f"{host}:/{remote_path}", dest_path],
-                    check=True
-                )
+            # Загрузка
+            if uri.startswith("s3://"):
+                subprocess.run(["aws", "s3", "cp", uri, dest], check=True)
             else:
-                print(f"[ingestion] ERROR: unknown source-type '{source_type}'")
-                sys.exit(1)
+                urllib.request.urlretrieve(uri, dest)
+            print(f"[ingest] saved to {dest}")
 
-            print(f"[ingestion] File saved to: {dest_path}")
-            with open("/tmp/output-path.txt", "w") as f:
-                f.write(dest_path)
+            # Подсчёт строк
+            row_count = -1
+            if fmt == "csv":
+                with open(dest) as f:
+                    row_count = sum(1 for _ in f) - 1   # минус заголовок
+            elif fmt == "json":
+                with open(dest) as f:
+                    data = json.load(f)
+                row_count = len(data) if isinstance(data, list) else 1
+
+            status = "ok" if row_count != 0 else "empty"
+            print(f"[ingest] rows={row_count}, status={status}")
+
+            open("/tmp/saved-path.txt", "w").write(dest)
+            open("/tmp/row-count.txt",  "w").write(str(row_count))
+            open("/tmp/status.txt",     "w").write(status)
         resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+          requests: {memory: "128Mi", cpu: "100m"}
+          limits:   {memory: "256Mi", cpu: "300m"}
         env:
-          # AWS credentials из Secret (если нужен S3)
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -170,119 +94,3 @@ spec:
                 name: aws-credentials
                 key: secret-access-key
                 optional: true
-          - name: AWS_DEFAULT_REGION
-            value: "us-east-1"
-
-    # ── Шаблон валидации схемы ───────────────────────────────────────────────
-    - name: validate-schema
-      inputs:
-        parameters:
-          - name: file-path
-          - name: file-format
-          - name: schema-json
-          - name: delimiter
-          - name: max-rows-sample
-      outputs:
-        parameters:
-          - name: row-count
-            valueFrom:
-              path: /tmp/row-count.txt
-          - name: status
-            valueFrom:
-              path: /tmp/validation-status.txt
-          - name: report
-            valueFrom:
-              path: /tmp/validation-report.json
-      container:
-        image: python:3.11-slim
-        command: [python, -c]
-        args:
-          - |
-            import json, sys, csv, pathlib
-
-            file_path  = "{{inputs.parameters.file-path}}"
-            fmt        = "{{inputs.parameters.file-format}}"
-            schema_raw = '''{{inputs.parameters.schema-json}}'''
-            delimiter  = "{{inputs.parameters.delimiter}}"
-            max_rows   = int("{{inputs.parameters.max-rows-sample}}")
-
-            schema = json.loads(schema_raw) if schema_raw.strip() not in ("{}", "") else {}
-            errors = []
-            row_count = 0
-
-            try:
-                if fmt == "csv":
-                    with open(file_path, newline="", encoding="utf-8") as f:
-                        reader = csv.DictReader(f, delimiter=delimiter)
-                        headers = reader.fieldnames or []
-                        # Проверяем наличие обязательных колонок
-                        for col, col_type in schema.items():
-                            if col not in headers:
-                                errors.append(f"Missing column: {col}")
-                        for i, row in enumerate(reader):
-                            if i >= max_rows:
-                                break
-                            row_count += 1
-                            # Проверяем типы
-                            for col, expected_type in schema.items():
-                                val = row.get(col, "")
-                                if expected_type == "int":
-                                    try: int(val)
-                                    except: errors.append(f"Row {i+1}: col '{col}' not int: '{val}'")
-                                elif expected_type == "float":
-                                    try: float(val)
-                                    except: errors.append(f"Row {i+1}: col '{col}' not float: '{val}'")
-
-                elif fmt == "json":
-                    with open(file_path, encoding="utf-8") as f:
-                        data = json.load(f)
-                    if isinstance(data, list):
-                        row_count = len(data)
-                        for i, record in enumerate(data[:max_rows]):
-                            for col in schema:
-                                if col not in record:
-                                    errors.append(f"Record {i}: missing key '{col}'")
-                    else:
-                        row_count = 1
-
-                elif fmt in ("parquet", "avro"):
-                    # Для бинарных форматов — только проверка существования файла
-                    size = pathlib.Path(file_path).stat().st_size
-                    row_count = -1  # неизвестно без pandas/pyarrow
-                    print(f"[validate] Binary format {fmt}, size={size} bytes")
-
-                else:
-                    errors.append(f"Unsupported format: {fmt}")
-
-            except Exception as e:
-                errors.append(f"Exception during validation: {e}")
-
-            status = "passed" if not errors else "failed"
-            report = {
-                "status": status,
-                "row_count": row_count,
-                "errors": errors[:50],   # ограничиваем вывод
-                "schema_checked": bool(schema),
-            }
-
-            print(f"[validate] Status: {status}, rows: {row_count}, errors: {len(errors)}")
-
-            with open("/tmp/row-count.txt", "w") as f:
-                f.write(str(row_count))
-            with open("/tmp/validation-status.txt", "w") as f:
-                f.write(status)
-            with open("/tmp/validation-report.json", "w") as f:
-                json.dump(report, f, indent=2)
-
-            if status == "failed":
-                print("[validate] Validation FAILED. Errors:")
-                for e in errors[:10]:
-                    print(f"  - {e}")
-                sys.exit(1)
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"

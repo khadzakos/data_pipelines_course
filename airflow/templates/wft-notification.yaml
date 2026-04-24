@@ -1,404 +1,101 @@
 # =============================================================================
-# WorkflowTemplate 3: Notification & Alerting
+# WorkflowTemplate 3: Notification
 # =============================================================================
-# Назначение: Универсальный шаблон отправки уведомлений о статусе пайплайна
-# через несколько каналов: Slack, Email (SMTP), Telegram, PagerDuty.
-# Используется как в успешных сценариях, так и при ошибках (onExit-хук).
+# Отправляет уведомление в Slack или Telegram о статусе пайплайна.
+# Используется как в штатных сценариях, так и в onExit-хуке при ошибке.
 #
-# Входные параметры:
-#   channel           — канал: slack | email | telegram | pagerduty | all
-#   severity          — уровень: info | warning | error | critical
-#   pipeline-name     — имя пайплайна/workflow
-#   pipeline-status   — статус: success | failed | running | skipped
-#   message           — основной текст сообщения
-#   details-json      — JSON с дополнительными деталями (метрики, ссылки и т.д.)
-#   slack-webhook-url — Slack Incoming Webhook URL (из Secret)
-#   email-to          — адрес получателя (для email-канала)
-#   telegram-chat-id  — ID чата Telegram (из Secret)
-#   runbook-url       — ссылка на runbook (для ошибок)
-#   mention-users     — список @-упоминаний через запятую (для Slack)
+# inputs.parameters:
+#   channel        — slack | telegram
+#   status         — success | failed | warning
+#   pipeline-name  — имя пайплайна
+#   message        — текст сообщения
 #
-# Выходные параметры:
-#   notification-id   — уникальный ID отправленного уведомления
-#   channels-sent     — список каналов, в которые успешно отправлено
-#   sent-at           — timestamp отправки (ISO 8601)
+# outputs.parameters:
+#   sent-at        — timestamp отправки (ISO 8601 UTC)
+#   channel-used   — канал, через который отправлено
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: notification-template
+  name: notification
   namespace: argo
   labels:
-    app: data-pipeline
     layer: observability
-  annotations:
-    description: "Universal multi-channel notification and alerting template"
-    version: "1.0.0"
 spec:
   templates:
-
-    # ── Точка входа: маршрутизация по каналам ────────────────────────────────
     - name: notify
       inputs:
         parameters:
           - name: channel
             value: "slack"
-          - name: severity
+          - name: status
             value: "info"
           - name: pipeline-name
-          - name: pipeline-status
           - name: message
-          - name: details-json
-            value: "{}"
-          - name: slack-webhook-url
-            value: ""
-          - name: email-to
-            value: ""
-          - name: telegram-chat-id
-            value: ""
-          - name: runbook-url
-            value: ""
-          - name: mention-users
-            value: ""
       outputs:
         parameters:
-          - name: notification-id
-            valueFrom:
-              parameter: "{{steps.send-notification.outputs.parameters.notification-id}}"
-          - name: channels-sent
-            valueFrom:
-              parameter: "{{steps.send-notification.outputs.parameters.channels-sent}}"
-          - name: sent-at
-            valueFrom:
-              parameter: "{{steps.send-notification.outputs.parameters.sent-at}}"
-      steps:
-        - - name: send-notification
-            template: dispatch-notification
-            arguments:
-              parameters:
-                - name: channel
-                  value: "{{inputs.parameters.channel}}"
-                - name: severity
-                  value: "{{inputs.parameters.severity}}"
-                - name: pipeline-name
-                  value: "{{inputs.parameters.pipeline-name}}"
-                - name: pipeline-status
-                  value: "{{inputs.parameters.pipeline-status}}"
-                - name: message
-                  value: "{{inputs.parameters.message}}"
-                - name: details-json
-                  value: "{{inputs.parameters.details-json}}"
-                - name: slack-webhook-url
-                  value: "{{inputs.parameters.slack-webhook-url}}"
-                - name: email-to
-                  value: "{{inputs.parameters.email-to}}"
-                - name: telegram-chat-id
-                  value: "{{inputs.parameters.telegram-chat-id}}"
-                - name: runbook-url
-                  value: "{{inputs.parameters.runbook-url}}"
-                - name: mention-users
-                  value: "{{inputs.parameters.mention-users}}"
-
-    # ── Диспетчер уведомлений ────────────────────────────────────────────────
-    - name: dispatch-notification
-      inputs:
-        parameters:
-          - name: channel
-          - name: severity
-          - name: pipeline-name
-          - name: pipeline-status
-          - name: message
-          - name: details-json
-          - name: slack-webhook-url
-          - name: email-to
-          - name: telegram-chat-id
-          - name: runbook-url
-          - name: mention-users
-      outputs:
-        parameters:
-          - name: notification-id
-            valueFrom:
-              path: /tmp/notification-id.txt
-          - name: channels-sent
-            valueFrom:
-              path: /tmp/channels-sent.txt
           - name: sent-at
             valueFrom:
               path: /tmp/sent-at.txt
+          - name: channel-used
+            valueFrom:
+              path: /tmp/channel-used.txt
       container:
         image: python:3.11-slim
         command: [python, -c]
         args:
           - |
-            import json, os, sys, uuid, datetime, urllib.request, urllib.error, smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
+            import os, json, datetime, urllib.request
 
-            # ── Входные параметры ────────────────────────────────────────────
-            channel        = "{{inputs.parameters.channel}}"
-            severity       = "{{inputs.parameters.severity}}"
-            pipeline_name  = "{{inputs.parameters.pipeline-name}}"
-            pipeline_status= "{{inputs.parameters.pipeline-status}}"
-            message        = "{{inputs.parameters.message}}"
-            details_raw    = """{{inputs.parameters.details-json}}"""
-            slack_webhook  = "{{inputs.parameters.slack-webhook-url}}"
-            email_to       = "{{inputs.parameters.email-to}}"
-            tg_chat_id     = "{{inputs.parameters.telegram-chat-id}}"
-            runbook_url    = "{{inputs.parameters.runbook-url}}"
-            mention_users  = "{{inputs.parameters.mention-users}}"
+            channel  = "{{inputs.parameters.channel}}"
+            status   = "{{inputs.parameters.status}}"
+            name     = "{{inputs.parameters.pipeline-name}}"
+            message  = "{{inputs.parameters.message}}"
 
-            # Из переменных окружения (Secrets)
-            slack_webhook  = slack_webhook or os.getenv("SLACK_WEBHOOK_URL", "")
-            tg_bot_token   = os.getenv("TELEGRAM_BOT_TOKEN", "")
-            tg_chat_id     = tg_chat_id or os.getenv("TELEGRAM_CHAT_ID", "")
-            smtp_host      = os.getenv("SMTP_HOST", "smtp.gmail.com")
-            smtp_port      = int(os.getenv("SMTP_PORT", "587"))
-            smtp_user      = os.getenv("SMTP_USER", "")
-            smtp_pass      = os.getenv("SMTP_PASSWORD", "")
-            pd_routing_key = os.getenv("PAGERDUTY_ROUTING_KEY", "")
+            icons = {"success": "✅", "failed": "❌", "warning": "⚠️", "info": "ℹ️"}
+            icon  = icons.get(status, "ℹ️")
+            now   = datetime.datetime.utcnow().isoformat() + "Z"
+            text  = f"{icon} *{name}* [{status.upper()}]\n{message}\n_Time: {now}_"
 
-            try:
-                details = json.loads(details_raw) if details_raw.strip() not in ("{}", "") else {}
-            except:
-                details = {"raw": details_raw}
+            sent = False
 
-            notification_id = str(uuid.uuid4())[:8]
-            sent_at = datetime.datetime.utcnow().isoformat() + "Z"
-            channels_sent = []
+            if channel == "slack":
+                webhook = os.getenv("SLACK_WEBHOOK_URL", "")
+                if webhook:
+                    payload = {"text": text}
+                    req = urllib.request.Request(
+                        webhook,
+                        data=json.dumps(payload).encode(),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    urllib.request.urlopen(req, timeout=10)
+                    sent = True
+                    print(f"[notify] Slack: sent")
 
-            # ── Иконки и цвета по severity ───────────────────────────────────
-            ICONS = {"info": "ℹ️", "warning": "⚠️", "error": "❌", "critical": "🚨"}
-            COLORS = {"info": "#36a64f", "warning": "#ff9900", "error": "#cc0000", "critical": "#7b0000"}
-            STATUS_ICONS = {"success": "✅", "failed": "❌", "running": "🔄", "skipped": "⏭️"}
+            elif channel == "telegram":
+                token   = os.getenv("TELEGRAM_BOT_TOKEN", "")
+                chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+                if token and chat_id:
+                    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+                    url = f"https://api.telegram.org/bot{token}/sendMessage"
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(payload).encode(),
+                        headers={"Content-Type": "application/json"}
+                    )
+                    urllib.request.urlopen(req, timeout=10)
+                    sent = True
+                    print(f"[notify] Telegram: sent")
 
-            icon = ICONS.get(severity, "ℹ️")
-            color = COLORS.get(severity, "#36a64f")
-            status_icon = STATUS_ICONS.get(pipeline_status, "❓")
+            if not sent:
+                print(f"[notify] No credentials for '{channel}', printing only:\n{text}")
 
-            # ── Форматирование деталей ───────────────────────────────────────
-            details_text = "\n".join(f"  • *{k}*: {v}" for k, v in details.items()) if details else ""
-            runbook_text = f"\n  • *Runbook*: {runbook_url}" if runbook_url else ""
-            mentions_text = " ".join(f"<@{u.strip()}>" for u in mention_users.split(",") if u.strip())
-
-            # ════════════════════════════════════════════════════════════════
-            # SLACK
-            # ════════════════════════════════════════════════════════════════
-            def send_slack():
-                if not slack_webhook:
-                    print("[notify] Slack webhook not configured, skipping.")
-                    return False
-
-                blocks = [
-                    {
-                        "type": "header",
-                        "text": {"type": "plain_text", "text": f"{icon} Pipeline Notification"}
-                    },
-                    {
-                        "type": "section",
-                        "fields": [
-                            {"type": "mrkdwn", "text": f"*Pipeline:*\n{pipeline_name}"},
-                            {"type": "mrkdwn", "text": f"*Status:*\n{status_icon} {pipeline_status.upper()}"},
-                            {"type": "mrkdwn", "text": f"*Severity:*\n{severity.upper()}"},
-                            {"type": "mrkdwn", "text": f"*Time:*\n{sent_at}"},
-                        ]
-                    },
-                    {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Message:*\n{message}"}
-                    }
-                ]
-
-                if details_text or runbook_text:
-                    blocks.append({
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Details:*\n{details_text}{runbook_text}"}
-                    })
-
-                if mentions_text:
-                    blocks.append({
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"CC: {mentions_text}"}
-                    })
-
-                payload = {
-                    "attachments": [{
-                        "color": color,
-                        "blocks": blocks,
-                        "footer": f"Notification ID: {notification_id}"
-                    }]
-                }
-
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(
-                    slack_webhook,
-                    data=data,
-                    headers={"Content-Type": "application/json"}
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        print(f"[notify] Slack: sent (HTTP {resp.status})")
-                        return True
-                except urllib.error.HTTPError as e:
-                    print(f"[notify] Slack ERROR: {e.code} {e.reason}")
-                    return False
-
-            # ════════════════════════════════════════════════════════════════
-            # EMAIL (SMTP)
-            # ════════════════════════════════════════════════════════════════
-            def send_email():
-                if not email_to or not smtp_user:
-                    print("[notify] Email not configured, skipping.")
-                    return False
-
-                subject = f"[{severity.upper()}] Pipeline '{pipeline_name}' — {pipeline_status.upper()}"
-                html_body = f"""
-                <html><body>
-                <h2>{icon} {subject}</h2>
-                <table border="1" cellpadding="6" cellspacing="0">
-                  <tr><td><b>Pipeline</b></td><td>{pipeline_name}</td></tr>
-                  <tr><td><b>Status</b></td><td>{status_icon} {pipeline_status}</td></tr>
-                  <tr><td><b>Severity</b></td><td>{severity}</td></tr>
-                  <tr><td><b>Time</b></td><td>{sent_at}</td></tr>
-                  <tr><td><b>Message</b></td><td>{message}</td></tr>
-                </table>
-                {"<h3>Details</h3><pre>" + json.dumps(details, indent=2) + "</pre>" if details else ""}
-                {"<p><b>Runbook:</b> <a href='" + runbook_url + "'>" + runbook_url + "</a></p>" if runbook_url else ""}
-                <hr><small>Notification ID: {notification_id}</small>
-                </body></html>
-                """
-
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = smtp_user
-                msg["To"] = email_to
-                msg.attach(MIMEText(html_body, "html"))
-
-                try:
-                    with smtplib.SMTP(smtp_host, smtp_port) as server:
-                        server.starttls()
-                        server.login(smtp_user, smtp_pass)
-                        server.sendmail(smtp_user, email_to, msg.as_string())
-                    print(f"[notify] Email: sent to {email_to}")
-                    return True
-                except Exception as e:
-                    print(f"[notify] Email ERROR: {e}")
-                    return False
-
-            # ════════════════════════════════════════════════════════════════
-            # TELEGRAM
-            # ════════════════════════════════════════════════════════════════
-            def send_telegram():
-                if not tg_bot_token or not tg_chat_id:
-                    print("[notify] Telegram not configured, skipping.")
-                    return False
-
-                text = (
-                    f"{icon} *Pipeline Notification*\n\n"
-                    f"*Pipeline:* `{pipeline_name}`\n"
-                    f"*Status:* {status_icon} {pipeline_status.upper()}\n"
-                    f"*Severity:* {severity.upper()}\n"
-                    f"*Time:* {sent_at}\n\n"
-                    f"*Message:* {message}"
-                )
-                if details:
-                    text += f"\n\n*Details:*\n```{json.dumps(details, indent=2)}```"
-                if runbook_url:
-                    text += f"\n\n[Runbook]({runbook_url})"
-
-                payload = {
-                    "chat_id": tg_chat_id,
-                    "text": text,
-                    "parse_mode": "Markdown",
-                    "disable_web_page_preview": True
-                }
-                url = f"https://api.telegram.org/bot{tg_bot_token}/sendMessage"
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        print(f"[notify] Telegram: sent (HTTP {resp.status})")
-                        return True
-                except urllib.error.HTTPError as e:
-                    print(f"[notify] Telegram ERROR: {e.code} {e.reason}")
-                    return False
-
-            # ════════════════════════════════════════════════════════════════
-            # PAGERDUTY
-            # ════════════════════════════════════════════════════════════════
-            def send_pagerduty():
-                if not pd_routing_key:
-                    print("[notify] PagerDuty not configured, skipping.")
-                    return False
-
-                # Только для error/critical создаём инцидент
-                if severity not in ("error", "critical"):
-                    print(f"[notify] PagerDuty: severity={severity}, skipping (only error/critical)")
-                    return False
-
-                event_action = "trigger" if pipeline_status == "failed" else "resolve"
-                payload = {
-                    "routing_key": pd_routing_key,
-                    "event_action": event_action,
-                    "dedup_key": f"pipeline-{pipeline_name}",
-                    "payload": {
-                        "summary": f"[{severity.upper()}] Pipeline '{pipeline_name}' {pipeline_status}",
-                        "source": pipeline_name,
-                        "severity": severity,
-                        "custom_details": {
-                            "message": message,
-                            "status": pipeline_status,
-                            "notification_id": notification_id,
-                            **details
-                        }
-                    },
-                    "links": [{"href": runbook_url, "text": "Runbook"}] if runbook_url else []
-                }
-
-                url = "https://events.pagerduty.com/v2/enqueue"
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        print(f"[notify] PagerDuty: {event_action} sent (HTTP {resp.status})")
-                        return True
-                except urllib.error.HTTPError as e:
-                    print(f"[notify] PagerDuty ERROR: {e.code} {e.reason}")
-                    return False
-
-            # ── Маршрутизация ────────────────────────────────────────────────
-            dispatch = {
-                "slack":     send_slack,
-                "email":     send_email,
-                "telegram":  send_telegram,
-                "pagerduty": send_pagerduty,
-            }
-
-            if channel == "all":
-                targets = list(dispatch.keys())
-            else:
-                targets = [ch.strip() for ch in channel.split(",")]
-
-            for ch in targets:
-                fn = dispatch.get(ch)
-                if fn and fn():
-                    channels_sent.append(ch)
-
-            print(f"[notify] Notification {notification_id} sent via: {channels_sent}")
-
-            with open("/tmp/notification-id.txt", "w") as f:
-                f.write(notification_id)
-            with open("/tmp/channels-sent.txt", "w") as f:
-                f.write(",".join(channels_sent) if channels_sent else "none")
-            with open("/tmp/sent-at.txt", "w") as f:
-                f.write(sent_at)
+            open("/tmp/sent-at.txt",     "w").write(now)
+            open("/tmp/channel-used.txt","w").write(channel if sent else "none")
         resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
+          requests: {memory: "64Mi",  cpu: "50m"}
+          limits:   {memory: "128Mi", cpu: "100m"}
         env:
           - name: SLACK_WEBHOOK_URL
             valueFrom:
@@ -417,34 +114,4 @@ spec:
               secretKeyRef:
                 name: notification-secrets
                 key: telegram-chat-id
-                optional: true
-          - name: SMTP_HOST
-            valueFrom:
-              secretKeyRef:
-                name: notification-secrets
-                key: smtp-host
-                optional: true
-          - name: SMTP_PORT
-            valueFrom:
-              secretKeyRef:
-                name: notification-secrets
-                key: smtp-port
-                optional: true
-          - name: SMTP_USER
-            valueFrom:
-              secretKeyRef:
-                name: notification-secrets
-                key: smtp-user
-                optional: true
-          - name: SMTP_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: notification-secrets
-                key: smtp-password
-                optional: true
-          - name: PAGERDUTY_ROUTING_KEY
-            valueFrom:
-              secretKeyRef:
-                name: notification-secrets
-                key: pagerduty-routing-key
                 optional: true

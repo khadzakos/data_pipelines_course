@@ -1,0 +1,139 @@
+# =============================================================================
+# Main Workflow: ETL Data Pipeline
+# =============================================================================
+# Пайплайн объединяет три WorkflowTemplate в осмысленную цепочку:
+#
+#   [ingest] ──► [transform] ──► [notify-success]
+#       │                              ▲
+#       └── (onExit) ─────────► [notify-failure]
+#
+# Шаги:
+#   1. ingest     — загружает CSV из HTTP-источника, проверяет непустоту
+#   2. transform  — фильтрует строки через PySpark, пишет Parquet
+#   3. notify     — сообщает в Slack об успехе или ошибке
+#
+# Параметры можно переопределить при запуске:
+#   argo submit main-pipeline.yaml -p source-uri=https://... -p filter-sql="age > 18"
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: etl-pipeline-
+  namespace: argo
+  labels:
+    app: data-pipeline
+spec:
+  # ── Параметры пайплайна ────────────────────────────────────────────────────
+  arguments:
+    parameters:
+      - name: source-uri
+        value: "https://people.sc.fsu.edu/~jburkardt/data/csv/addresses.csv"
+      - name: raw-path
+        value: "/data/raw/input.csv"
+      - name: output-path
+        value: "/data/processed/output"
+      - name: filter-sql
+        value: ""                    # пустая строка = без фильтра
+      - name: notify-channel
+        value: "slack"
+      - name: pipeline-name
+        value: "etl-pipeline"
+
+  # ── Точка входа ────────────────────────────────────────────────────────────
+  entrypoint: run-pipeline
+
+  # ── onExit: уведомление при любом завершении (успех или ошибка) ───────────
+  onExit: exit-notify
+
+  # ── Шаблоны ────────────────────────────────────────────────────────────────
+  templates:
+
+    # ── Главный DAG ──────────────────────────────────────────────────────────
+    - name: run-pipeline
+      dag:
+        tasks:
+
+          # Шаг 1: загрузка данных
+          - name: ingest
+            templateRef:
+              name: data-ingestion   # ссылка на WorkflowTemplate
+              template: ingest
+            arguments:
+              parameters:
+                - name: source-uri
+                  value: "{{workflow.parameters.source-uri}}"
+                - name: destination
+                  value: "{{workflow.parameters.raw-path}}"
+                - name: expected-format
+                  value: "csv"
+
+          # Шаг 2: трансформация (запускается после успешного ingest)
+          - name: transform
+            dependencies: [ingest]
+            templateRef:
+              name: spark-transform
+              template: transform
+            arguments:
+              parameters:
+                - name: input-path
+                  value: "{{tasks.ingest.outputs.parameters.saved-path}}"
+                - name: output-path
+                  value: "{{workflow.parameters.output-path}}"
+                - name: input-format
+                  value: "csv"
+                - name: output-format
+                  value: "parquet"
+                - name: filter-sql
+                  value: "{{workflow.parameters.filter-sql}}"
+                - name: spark-master
+                  value: "local[*]"
+
+          # Шаг 3: уведомление об успехе
+          - name: notify-success
+            dependencies: [transform]
+            templateRef:
+              name: notification
+              template: notify
+            arguments:
+              parameters:
+                - name: channel
+                  value: "{{workflow.parameters.notify-channel}}"
+                - name: status
+                  value: "success"
+                - name: pipeline-name
+                  value: "{{workflow.parameters.pipeline-name}}"
+                - name: message
+                  value: >-
+                    Ingested {{tasks.ingest.outputs.parameters.row-count}} rows.
+                    After transform: {{tasks.transform.outputs.parameters.records-out}} records
+                    saved to {{tasks.transform.outputs.parameters.output-path}}.
+
+    # ── onExit-шаблон: уведомление при ошибке или успехе ────────────────────
+    - name: exit-notify
+      steps:
+        - - name: send-exit-notification
+            templateRef:
+              name: notification
+              template: notify
+            arguments:
+              parameters:
+                - name: channel
+                  value: "{{workflow.parameters.notify-channel}}"
+                - name: status
+                  value: "{{workflow.status}}"   # Succeeded | Failed | Error
+                - name: pipeline-name
+                  value: "{{workflow.parameters.pipeline-name}}"
+                - name: message
+                  value: "Workflow {{workflow.name}} finished with status: {{workflow.status}}"
+
+  # ── Политики ────────────────────────────────────────────────────────────────
+  podGC:
+    strategy: OnWorkflowCompletion   # удалять поды после завершения
+  ttlStrategy:
+    secondsAfterCompletion: 3600     # хранить Workflow 1 час
+    secondsAfterSuccess: 3600
+    secondsAfterFailure: 86400       # при ошибке — сутки для отладки
+  retryStrategy:
+    limit: "2"
+    retryPolicy: OnFailure

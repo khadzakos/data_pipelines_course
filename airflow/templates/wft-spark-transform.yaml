@@ -1,333 +1,107 @@
 # =============================================================================
-# WorkflowTemplate 2: Spark Data Transformation
+# WorkflowTemplate 2: Spark Transformation
 # =============================================================================
-# Назначение: Запускает Spark-задание (PySpark или Scala JAR) для трансформации
-# данных. Поддерживает режимы local (для тестов) и cluster (через spark-submit
-# к внешнему кластеру или Spark Operator). Возвращает путь к результату,
-# статистику выполнения и метрики качества.
+# Запускает PySpark-задание: читает данные, применяет SQL-фильтр, пишет результат.
 #
-# Входные параметры:
-#   input-path        — путь к входным данным (S3/GCS/HDFS/local)
-#   output-path       — путь для записи результата
-#   script-url        — URL PySpark-скрипта (S3/HTTP) или "inline" для встроенного
-#   script-inline     — встроенный PySpark-код (если script-url == "inline")
-#   input-format      — формат входных данных: csv | json | parquet | delta
-#   output-format     — формат выходных данных: csv | json | parquet | delta
-#   spark-master      — адрес Spark master (local[*] | spark://host:7077 | k8s://...)
-#   num-executors     — количество executor'ов (по умолчанию 2)
-#   executor-memory   — память на executor (по умолчанию "2g")
-#   executor-cores    — ядра на executor (по умолчанию 2)
-#   extra-spark-conf  — дополнительные spark-conf в формате "k1=v1,k2=v2"
-#   partition-by      — колонка для партиционирования выходных данных (опционально)
-#   filter-expr       — SQL WHERE-выражение для фильтрации (опционально)
+# inputs.parameters:
+#   input-path     — путь к входным данным (local/S3/HDFS)
+#   output-path    — путь для записи результата
+#   input-format   — csv | json | parquet
+#   output-format  — csv | json | parquet
+#   filter-sql     — SQL WHERE-выражение (опционально, "" = без фильтра)
+#   spark-master   — local[*] | spark://host:7077
 #
-# Выходные параметры:
-#   output-path       — итоговый путь к результату
-#   records-in        — количество входных записей
-#   records-out       — количество выходных записей
-#   duration-seconds  — время выполнения Spark-задания
-#   spark-app-id      — ID Spark Application
+# outputs.parameters:
+#   output-path    — путь к результату
+#   records-in     — число входных записей
+#   records-out    — число выходных записей
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: spark-transform-template
+  name: spark-transform
   namespace: argo
   labels:
-    app: data-pipeline
     layer: transformation
-  annotations:
-    description: "Universal Spark transformation template (PySpark)"
-    version: "1.0.0"
 spec:
   templates:
-
-    # ── Точка входа ──────────────────────────────────────────────────────────
-    - name: spark-transform
+    - name: transform
       inputs:
         parameters:
           - name: input-path
           - name: output-path
-          - name: script-url
-            value: "inline"
-          - name: script-inline
-            value: ""
           - name: input-format
             value: "parquet"
           - name: output-format
             value: "parquet"
+          - name: filter-sql
+            value: ""
           - name: spark-master
             value: "local[*]"
-          - name: num-executors
-            value: "2"
-          - name: executor-memory
-            value: "2g"
-          - name: executor-cores
-            value: "2"
-          - name: extra-spark-conf
-            value: ""
-          - name: partition-by
-            value: ""
-          - name: filter-expr
-            value: ""
       outputs:
         parameters:
           - name: output-path
             valueFrom:
-              parameter: "{{steps.run-spark.outputs.parameters.output-path}}"
+              path: /tmp/output-path.txt
           - name: records-in
             valueFrom:
-              parameter: "{{steps.run-spark.outputs.parameters.records-in}}"
+              path: /tmp/records-in.txt
           - name: records-out
             valueFrom:
-              parameter: "{{steps.run-spark.outputs.parameters.records-out}}"
-          - name: duration-seconds
-            valueFrom:
-              parameter: "{{steps.run-spark.outputs.parameters.duration-seconds}}"
-          - name: spark-app-id
-            valueFrom:
-              parameter: "{{steps.run-spark.outputs.parameters.spark-app-id}}"
-      steps:
-        # Шаг 1: подготовить скрипт (скачать или использовать inline)
-        - - name: prepare-script
-            template: prepare-pyspark-script
-            arguments:
-              parameters:
-                - name: script-url
-                  value: "{{inputs.parameters.script-url}}"
-                - name: script-inline
-                  value: "{{inputs.parameters.script-inline}}"
-
-        # Шаг 2: запустить Spark
-        - - name: run-spark
-            template: execute-spark-job
-            arguments:
-              parameters:
-                - name: input-path
-                  value: "{{inputs.parameters.input-path}}"
-                - name: output-path
-                  value: "{{inputs.parameters.output-path}}"
-                - name: script-path
-                  value: "{{steps.prepare-script.outputs.parameters.script-path}}"
-                - name: input-format
-                  value: "{{inputs.parameters.input-format}}"
-                - name: output-format
-                  value: "{{inputs.parameters.output-format}}"
-                - name: spark-master
-                  value: "{{inputs.parameters.spark-master}}"
-                - name: num-executors
-                  value: "{{inputs.parameters.num-executors}}"
-                - name: executor-memory
-                  value: "{{inputs.parameters.executor-memory}}"
-                - name: executor-cores
-                  value: "{{inputs.parameters.executor-cores}}"
-                - name: extra-spark-conf
-                  value: "{{inputs.parameters.extra-spark-conf}}"
-                - name: partition-by
-                  value: "{{inputs.parameters.partition-by}}"
-                - name: filter-expr
-                  value: "{{inputs.parameters.filter-expr}}"
-
-    # ── Подготовка PySpark-скрипта ───────────────────────────────────────────
-    - name: prepare-pyspark-script
-      inputs:
-        parameters:
-          - name: script-url
-          - name: script-inline
-      outputs:
-        parameters:
-          - name: script-path
-            valueFrom:
-              path: /tmp/script-path.txt
+              path: /tmp/records-out.txt
       container:
-        image: python:3.11-slim
-        command: [python, -c]
-        args:
-          - |
-            import urllib.request, pathlib, sys
-
-            script_url    = "{{inputs.parameters.script-url}}"
-            script_inline = """{{inputs.parameters.script-inline}}"""
-            script_path   = "/tmp/transform_job.py"
-
-            if script_url == "inline":
-                if not script_inline.strip():
-                    # Дефолтный скрипт: читаем, применяем фильтр, пишем
-                    default_script = '''
-import sys, json, time
-from pyspark.sql import SparkSession
-
-input_path   = sys.argv[1]
-output_path  = sys.argv[2]
-input_fmt    = sys.argv[3]
-output_fmt   = sys.argv[4]
-filter_expr  = sys.argv[5] if len(sys.argv) > 5 else ""
-partition_by = sys.argv[6] if len(sys.argv) > 6 else ""
-
-spark = SparkSession.builder.appName("DataTransform").getOrCreate()
-spark.sparkContext.setLogLevel("WARN")
-
-t0 = time.time()
-df = spark.read.format(input_fmt).option("header", "true").option("inferSchema", "true").load(input_path)
-records_in = df.count()
-print(f"[spark] Records in: {records_in}")
-
-if filter_expr:
-    df = df.filter(filter_expr)
-    print(f"[spark] Applied filter: {filter_expr}")
-
-records_out = df.count()
-print(f"[spark] Records out: {records_out}")
-
-writer = df.write.format(output_fmt).mode("overwrite").option("header", "true")
-if partition_by:
-    writer = writer.partitionBy(partition_by)
-writer.save(output_path)
-
-duration = round(time.time() - t0, 2)
-app_id = spark.sparkContext.applicationId
-print(f"[spark] Done. Duration={duration}s, AppId={app_id}")
-
-with open("/tmp/spark-metrics.json", "w") as f:
-    import json
-    json.dump({"records_in": records_in, "records_out": records_out,
-               "duration": duration, "app_id": app_id, "output_path": output_path}, f)
-
-spark.stop()
-'''
-                    with open(script_path, "w") as f:
-                        f.write(default_script)
-                else:
-                    with open(script_path, "w") as f:
-                        f.write(script_inline)
-            elif script_url.startswith("s3://"):
-                import subprocess
-                subprocess.run(["aws", "s3", "cp", script_url, script_path], check=True)
-            elif script_url.startswith("http"):
-                urllib.request.urlretrieve(script_url, script_path)
-            else:
-                print(f"[prepare] ERROR: unknown script-url scheme: {script_url}")
-                sys.exit(1)
-
-            print(f"[prepare] Script ready at: {script_path}")
-            with open("/tmp/script-path.txt", "w") as f:
-                f.write(script_path)
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-
-    # ── Выполнение Spark-задания ─────────────────────────────────────────────
-    - name: execute-spark-job
-      inputs:
-        parameters:
-          - name: input-path
-          - name: output-path
-          - name: script-path
-          - name: input-format
-          - name: output-format
-          - name: spark-master
-          - name: num-executors
-          - name: executor-memory
-          - name: executor-cores
-          - name: extra-spark-conf
-          - name: partition-by
-          - name: filter-expr
-      outputs:
-        parameters:
-          - name: output-path
-            valueFrom:
-              path: /tmp/spark-output-path.txt
-          - name: records-in
-            valueFrom:
-              path: /tmp/spark-records-in.txt
-          - name: records-out
-            valueFrom:
-              path: /tmp/spark-records-out.txt
-          - name: duration-seconds
-            valueFrom:
-              path: /tmp/spark-duration.txt
-          - name: spark-app-id
-            valueFrom:
-              path: /tmp/spark-app-id.txt
-      container:
-        # Образ с PySpark (можно заменить на bitnami/spark или apache/spark)
         image: bitnami/spark:3.5
         command: [bash, -c]
         args:
           - |
-            set -e
+            cat > /tmp/job.py << 'PYEOF'
+            import sys, json, time
+            from pyspark.sql import SparkSession
 
-            INPUT_PATH="{{inputs.parameters.input-path}}"
-            OUTPUT_PATH="{{inputs.parameters.output-path}}"
-            SCRIPT_PATH="{{inputs.parameters.script-path}}"
-            INPUT_FMT="{{inputs.parameters.input-format}}"
-            OUTPUT_FMT="{{inputs.parameters.output-format}}"
-            MASTER="{{inputs.parameters.spark-master}}"
-            NUM_EXEC="{{inputs.parameters.num-executors}}"
-            EXEC_MEM="{{inputs.parameters.executor-memory}}"
-            EXEC_CORES="{{inputs.parameters.executor-cores}}"
-            EXTRA_CONF="{{inputs.parameters.extra-spark-conf}}"
-            PARTITION_BY="{{inputs.parameters.partition-by}}"
-            FILTER_EXPR="{{inputs.parameters.filter-expr}}"
+            in_path, out_path, in_fmt, out_fmt, filter_sql, master = sys.argv[1:]
 
-            # Формируем дополнительные --conf флаги
-            CONF_FLAGS=""
-            if [ -n "$EXTRA_CONF" ]; then
-              IFS=',' read -ra PAIRS <<< "$EXTRA_CONF"
-              for pair in "${PAIRS[@]}"; do
-                CONF_FLAGS="$CONF_FLAGS --conf $pair"
-              done
-            fi
+            spark = (SparkSession.builder
+                     .master(master)
+                     .appName("spark-transform")
+                     .getOrCreate())
+            spark.sparkContext.setLogLevel("WARN")
 
-            echo "[spark-submit] Starting job..."
-            echo "  Input:   $INPUT_PATH ($INPUT_FMT)"
-            echo "  Output:  $OUTPUT_PATH ($OUTPUT_FMT)"
-            echo "  Master:  $MASTER"
-            echo "  Executors: $NUM_EXEC x ${EXEC_CORES}c/${EXEC_MEM}"
+            df = (spark.read.format(in_fmt)
+                  .option("header", "true")
+                  .option("inferSchema", "true")
+                  .load(in_path))
+            records_in = df.count()
+
+            if filter_sql:
+                df = df.filter(filter_sql)
+            records_out = df.count()
+
+            (df.write.format(out_fmt)
+               .mode("overwrite")
+               .option("header", "true")
+               .save(out_path))
+
+            open("/tmp/output-path.txt", "w").write(out_path)
+            open("/tmp/records-in.txt",  "w").write(str(records_in))
+            open("/tmp/records-out.txt", "w").write(str(records_out))
+            print(f"[spark] in={records_in} out={records_out} -> {out_path}")
+            spark.stop()
+            PYEOF
 
             spark-submit \
-              --master "$MASTER" \
-              --num-executors "$NUM_EXEC" \
-              --executor-memory "$EXEC_MEM" \
-              --executor-cores "$EXEC_CORES" \
-              $CONF_FLAGS \
-              "$SCRIPT_PATH" \
-              "$INPUT_PATH" "$OUTPUT_PATH" "$INPUT_FMT" "$OUTPUT_FMT" \
-              "$FILTER_EXPR" "$PARTITION_BY"
-
-            echo "[spark-submit] Job completed."
-
-            # Читаем метрики, записанные скриптом
-            if [ -f /tmp/spark-metrics.json ]; then
-              python3 -c "
-            import json
-            with open('/tmp/spark-metrics.json') as f:
-                m = json.load(f)
-            with open('/tmp/spark-output-path.txt', 'w') as f: f.write(m.get('output_path', ''))
-            with open('/tmp/spark-records-in.txt', 'w') as f:  f.write(str(m.get('records_in', -1)))
-            with open('/tmp/spark-records-out.txt', 'w') as f: f.write(str(m.get('records_out', -1)))
-            with open('/tmp/spark-duration.txt', 'w') as f:    f.write(str(m.get('duration', -1)))
-            with open('/tmp/spark-app-id.txt', 'w') as f:      f.write(m.get('app_id', 'unknown'))
-            "
-            else
-              echo "$OUTPUT_PATH" > /tmp/spark-output-path.txt
-              echo "-1"          > /tmp/spark-records-in.txt
-              echo "-1"          > /tmp/spark-records-out.txt
-              echo "-1"          > /tmp/spark-duration.txt
-              echo "unknown"     > /tmp/spark-app-id.txt
-            fi
+              --master "{{inputs.parameters.spark-master}}" \
+              /tmp/job.py \
+              "{{inputs.parameters.input-path}}" \
+              "{{inputs.parameters.output-path}}" \
+              "{{inputs.parameters.input-format}}" \
+              "{{inputs.parameters.output-format}}" \
+              "{{inputs.parameters.filter-sql}}" \
+              "{{inputs.parameters.spark-master}}"
         resources:
-          requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
+          requests: {memory: "1Gi",  cpu: "500m"}
+          limits:   {memory: "2Gi",  cpu: "1500m"}
         env:
-          - name: SPARK_HOME
-            value: "/opt/bitnami/spark"
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
