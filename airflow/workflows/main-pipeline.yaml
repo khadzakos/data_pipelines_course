@@ -1,21 +1,3 @@
-# =============================================================================
-# Main Workflow: ETL Data Pipeline
-# =============================================================================
-# Пайплайн объединяет три WorkflowTemplate в осмысленную цепочку:
-#
-#   [ingest] ──► [transform] ──► [notify-success]
-#       │                              ▲
-#       └── (onExit) ─────────► [notify-failure]
-#
-# Шаги:
-#   1. ingest     — загружает CSV из HTTP-источника, проверяет непустоту
-#   2. transform  — фильтрует строки через PySpark, пишет Parquet
-#   3. notify     — сообщает в Slack об успехе или ошибке
-#
-# Параметры можно переопределить при запуске:
-#   argo submit main-pipeline.yaml -p source-uri=https://... -p filter-sql="age > 18"
-# =============================================================================
-
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:

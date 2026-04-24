@@ -1,20 +1,3 @@
-# =============================================================================
-# WorkflowTemplate 3: Notification
-# =============================================================================
-# Отправляет уведомление в Slack или Telegram о статусе пайплайна.
-# Используется как в штатных сценариях, так и в onExit-хуке при ошибке.
-#
-# inputs.parameters:
-#   channel        — slack | telegram
-#   status         — success | failed | warning
-#   pipeline-name  — имя пайплайна
-#   message        — текст сообщения
-#
-# outputs.parameters:
-#   sent-at        — timestamp отправки (ISO 8601 UTC)
-#   channel-used   — канал, через который отправлено
-# =============================================================================
-
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -28,7 +11,7 @@ spec:
       inputs:
         parameters:
           - name: channel
-            value: "slack"
+            value: "telegram"
           - name: status
             value: "info"
           - name: pipeline-name

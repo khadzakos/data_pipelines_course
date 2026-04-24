@@ -1,22 +1,3 @@
-# =============================================================================
-# WorkflowTemplate 2: Spark Transformation
-# =============================================================================
-# Запускает PySpark-задание: читает данные, применяет SQL-фильтр, пишет результат.
-#
-# inputs.parameters:
-#   input-path     — путь к входным данным (local/S3/HDFS)
-#   output-path    — путь для записи результата
-#   input-format   — csv | json | parquet
-#   output-format  — csv | json | parquet
-#   filter-sql     — SQL WHERE-выражение (опционально, "" = без фильтра)
-#   spark-master   — local[*] | spark://host:7077
-#
-# outputs.parameters:
-#   output-path    — путь к результату
-#   records-in     — число входных записей
-#   records-out    — число выходных записей
-# =============================================================================
-
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
