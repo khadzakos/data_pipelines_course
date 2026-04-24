@@ -18,28 +18,22 @@ spec:
       - name: filter-sql
         value: ""                    # пустая строка = без фильтра
       - name: notify-channel
-        value: "slack"
+        value: "telegram"
       - name: pipeline-name
         value: "etl-pipeline"
 
-  # ── Точка входа ────────────────────────────────────────────────────────────
   entrypoint: run-pipeline
 
-  # ── onExit: уведомление при любом завершении (успех или ошибка) ───────────
   onExit: exit-notify
 
-  # ── Шаблоны ────────────────────────────────────────────────────────────────
   templates:
-
-    # ── Главный DAG ──────────────────────────────────────────────────────────
     - name: run-pipeline
       dag:
         tasks:
 
-          # Шаг 1: загрузка данных
           - name: ingest
             templateRef:
-              name: data-ingestion   # ссылка на WorkflowTemplate
+              name: data-ingestion
               template: ingest
             arguments:
               parameters:
@@ -50,7 +44,6 @@ spec:
                 - name: expected-format
                   value: "csv"
 
-          # Шаг 2: трансформация (запускается после успешного ingest)
           - name: transform
             dependencies: [ingest]
             templateRef:
@@ -71,7 +64,6 @@ spec:
                 - name: spark-master
                   value: "local[*]"
 
-          # Шаг 3: уведомление об успехе
           - name: notify-success
             dependencies: [transform]
             templateRef:
@@ -91,7 +83,6 @@ spec:
                     After transform: {{tasks.transform.outputs.parameters.records-out}} records
                     saved to {{tasks.transform.outputs.parameters.output-path}}.
 
-    # ── onExit-шаблон: уведомление при ошибке или успехе ────────────────────
     - name: exit-notify
       steps:
         - - name: send-exit-notification
@@ -109,7 +100,6 @@ spec:
                 - name: message
                   value: "Workflow {{workflow.name}} finished with status: {{workflow.status}}"
 
-  # ── Политики ────────────────────────────────────────────────────────────────
   podGC:
     strategy: OnWorkflowCompletion   # удалять поды после завершения
   ttlStrategy:
