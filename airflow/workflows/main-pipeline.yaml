@@ -99,13 +99,3 @@ spec:
                   value: "{{workflow.parameters.pipeline-name}}"
                 - name: message
                   value: "Workflow {{workflow.name}} finished with status: {{workflow.status}}"
-
-  podGC:
-    strategy: OnWorkflowCompletion   # удалять поды после завершения
-  ttlStrategy:
-    secondsAfterCompletion: 3600     # хранить Workflow 1 час
-    secondsAfterSuccess: 3600
-    secondsAfterFailure: 86400       # при ошибке — сутки для отладки
-  retryStrategy:
-    limit: "2"
-    retryPolicy: OnFailure
